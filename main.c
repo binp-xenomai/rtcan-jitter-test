@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <pthread.h>
+#include <signal.h>
 
 #ifdef __XENO__
 #include <rtdm/can.h>
@@ -16,8 +17,8 @@
 #include <linux/can/raw.h>
 #endif
 
-//#define REALTIME
-#define CLOCK CLOCK_REALTIME //CLOCK_MONOTONIC
+#define REALTIME
+#define CLOCK CLOCK_MONOTONIC
 
 int can_socket(const char *ifname) {
 	int fd, st, ret = 0;
@@ -165,6 +166,9 @@ int main(int argc, char *argv[]) {
 		goto quit;
 	}
 	
+	//signal(SIGTERM, sighandler);
+	//signal(SIGINT, sighandler);
+	
 	fds = can_socket(argv[1]);
 	fdr = can_socket(argv[2]);
 	if(fds < 0 || fdr < 0) {
@@ -190,5 +194,6 @@ close:
 	if(fdr >= 0)
 		close(fdr);
 quit:
+	printf("exit\n");
 	return ret;
 }
