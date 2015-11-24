@@ -17,8 +17,16 @@
 #include <linux/can/raw.h>
 #endif
 
+#ifdef __XENO__
 #define REALTIME
+#endif // __XENO__
+
 #define CLOCK CLOCK_MONOTONIC
+
+#define STATS
+#ifdef STATS
+#define STATS_SIZE 0x100000 // 2^20
+#endif // STATS
 
 int can_socket(const char *ifname) {
 	int fd, st, ret = 0;
@@ -73,10 +81,13 @@ void sighandler(int signo) {
 struct cookie {
 	int fds, fdr;
 	struct timespec *lts;
+#ifdef STATS
+	long *stats;
+#endif
 };
 
 #define NS_SEC 1000000000l
-#define FREQ   100
+#define FREQ   1000
 
 void *send_main(void *data) {
 	struct cookie *cookie = (struct cookie*) data;
@@ -143,6 +154,13 @@ void *recv_main(void *data) {
 		if(ns > max_ns)
 			max_ns = ns;
 		
+#ifdef STATS
+		cookie->stats[counter] = ns;
+		if(counter + 1 >= STATS_SIZE) {
+			done = 1;
+		} 
+#endif // STATS
+		
 		++counter;
 		if(!(counter % FREQ)) {
 			printf("%ld\t%ld\t%ld\t%ld\n", min_ns, max_ns, avg_ns, cur_ns/FREQ);
@@ -161,10 +179,21 @@ int main(int argc, char *argv[]) {
 	struct cookie cookie;
 	pthread_t send_thread, recv_thread;
 	
+#ifdef STATS
+	FILE *file;
+	long *stats;
+	int i;
+#endif // STATS
+	
 	if(argc < 3) {
 		printf("usage: %s <send-if> <recv-if>\n", argv[0]);
 		goto quit;
 	}
+
+#ifdef STATS
+	/* alloc memory to store stats */
+	stats = (long *) malloc(sizeof(long)*STATS_SIZE);
+#endif // STATS
 	
 	//signal(SIGTERM, sighandler);
 	//signal(SIGINT, sighandler);
@@ -181,7 +210,10 @@ int main(int argc, char *argv[]) {
 	cookie.lts = &lts;
 	cookie.fdr = fdr;
 	cookie.fds = fds;
-	
+#ifdef STATS
+	cookie.stats = stats;
+#endif // STATS	
+		
 	pthread_create(&recv_thread, NULL, recv_main, &cookie);
 	pthread_create(&send_thread, NULL, send_main, &cookie);
 	
@@ -193,6 +225,18 @@ close:
 		close(fds);
 	if(fdr >= 0)
 		close(fdr);
+		
+#ifdef STATS
+print_stats:
+	/* dump stats and free mem */
+	file = fopen("stats.txt", "w");
+	for(i = 0; i < STATS_SIZE; ++i) {
+		fprintf(file, "%ld\n", stats[i]);
+	}
+	fclose(file);
+	free(stats);
+#endif // STATS
+
 quit:
 	printf("exit\n");
 	return ret;
