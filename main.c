@@ -81,6 +81,7 @@ void sighandler(int signo) {
 struct cookie {
 	int fds, fdr;
 	struct timespec *lts;
+	int allow;
 #ifdef STATS
 	long *stats;
 #endif
@@ -88,6 +89,8 @@ struct cookie {
 
 #define NS_SEC 1000000000l
 #define FREQ   1000
+
+int stack_counter = 0;
 
 void *send_main(void *data) {
 	struct cookie *cookie = (struct cookie*) data;
@@ -109,13 +112,19 @@ void *send_main(void *data) {
 	ts.tv_nsec = NS_SEC/FREQ;
 	
 	while(!done) {
+		nanosleep(&ts, NULL);
+		
+		if(cookie->allow)
+			cookie->allow = 0;
+		else
+			continue;
+		
 		clock_gettime(CLOCK, lts);
 		st = send(fd, &frame, sizeof(struct can_frame), 0);
 		if(st < 0) {
 			perror("send(fds)");
 			goto close;
 		}
-		nanosleep(&ts, NULL);
 	}
 	
 close:
@@ -146,6 +155,9 @@ void *recv_main(void *data) {
 		}
 		
 		clock_gettime(CLOCK, &ts);
+		
+		cookie->allow = 1;
+		
 		ns = NS_SEC*(ts.tv_sec - lts->tv_sec) + ts.tv_nsec - lts->tv_nsec;
 		avg_ns = (avg_ns*counter + ns)/(counter + 1);
 		cur_ns += ns;
@@ -210,6 +222,7 @@ int main(int argc, char *argv[]) {
 	cookie.lts = &lts;
 	cookie.fdr = fdr;
 	cookie.fds = fds;
+	cookie.allow = 1;
 #ifdef STATS
 	cookie.stats = stats;
 #endif // STATS	
