@@ -23,12 +23,14 @@
 
 #define CLOCK CLOCK_MONOTONIC
 
-//#define ASYNC
+#define ASYNC
 
 //#define STATS
 #ifdef STATS
 #define STATS_SIZE 0x100000 // 2^20
 #endif // STATS
+
+//#define DBGPRINT
 
 int can_socket(const char *ifname) {
 	int fd, st, ret = 0;
@@ -130,7 +132,12 @@ void *send_main(void *data) {
 		if(st < 0) {
 			perror("send(fds)");
 			goto close;
+		} 
+#ifdef DBGPRINT
+		else {
+			printf("send(fds) -> %d\n", st);
 		}
+#endif // DBGPRINT
 	}
 	
 close:
@@ -159,13 +166,17 @@ void *recv_main(void *data) {
 			perror("recv(fdr)");
 			goto close;
 		}
+#ifdef DBGPRINT
+		else {
+			printf("recv(fdr) -> %d\n", st);
+		}
+#endif // DBGPRINT
 		
 		clock_gettime(CLOCK, &ts);
 		
 		cookie->allow = 1;
 		
 		ns = NS_SEC*(ts.tv_sec - lts->tv_sec) + ts.tv_nsec - lts->tv_nsec;
-		avg_ns = (avg_ns*counter + ns)/(counter + 1);
 		cur_ns += ns;
 		if(ns < min_ns)
 			min_ns = ns;
@@ -181,8 +192,10 @@ void *recv_main(void *data) {
 		
 		++counter;
 		if(!(counter % FREQ)) {
-			printf("%ld\t%ld\t%ld\t%ld\n", min_ns, max_ns, avg_ns, cur_ns/FREQ);
+			printf("%ld\t%ld\t%ld\n", min_ns, max_ns, cur_ns/FREQ);
 			cur_ns = 0;
+			min_ns = NS_SEC;
+			max_ns = 0;
 		}
 	}
 	
@@ -220,7 +233,7 @@ int main(int argc, char *argv[]) {
 		goto close;
 	}
 	
-	printf("min\tmax\tavg\tcurrent\n");
+	printf("min\tmax\tcurrent\n");
 
 #ifdef ASYNC
 	struct timespec lts;
@@ -276,7 +289,7 @@ int main(int argc, char *argv[]) {
 				perror("send(fds)");
 				goto close;
 			} else {
-				// printf("fds send\n");
+				// printf("send(fds) returns %d\n", st);
 			}
 		}
 
